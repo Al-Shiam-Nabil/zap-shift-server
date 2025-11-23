@@ -4,6 +4,17 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
 require("dotenv").config();
+
+// firebase admin sdk
+
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./zap-shift-auth-firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 // tracking id function
@@ -28,6 +39,24 @@ const client = new MongoClient(uri, {
 // middleware
 app.use(cors());
 app.use(express.json());
+
+const verifyFbToken = async (req, res, next) => {
+  const token = req.headers?.authorization;
+
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access." });
+  }
+  const idToken = token.split(" ")[1];
+  console.log(idToken);
+  try {
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    req.decoded_email = decoded.email;
+    console.log(decoded);
+    next();
+  } catch (error) {
+    return res.status(401).send({ message: "unauthorized access." });
+  }
+};
 
 app.get("/", (req, res) => {
   res.json({ message: "welcome to zap shift server." });
@@ -165,11 +194,16 @@ async function run() {
       }
     });
 
-    app.get("/payments", async (req, res) => {
+    app.get("/payments", verifyFbToken, async (req, res) => {
+      console.log(req.decoded_email);
       const email = req.query.email;
       const query = {};
       if (email) {
         query.customerEmail = email;
+
+        if (email !== req.decoded_email) {
+          return res.status(403).send({ message: "Forbidden access." });
+        }
       }
 
       const cursor = paymentCollection.find(query);
