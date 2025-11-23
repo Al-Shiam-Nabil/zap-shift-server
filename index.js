@@ -70,6 +70,7 @@ async function run() {
     const parcelCollection = database.collection("zapParcels");
     const paymentCollection = database.collection("payments");
     const userCollection = database.collection("users");
+    const riderCollection = database.collection("riders");
 
     // user related api
     app.post("/users", async (req, res) => {
@@ -77,7 +78,23 @@ async function run() {
       user.role = "user";
       user.createdAt = new Date();
 
+      const isExist = await userCollection.findOne({ email: user.email });
+
+      if (isExist) {
+        return res.send({ message: "user already exist." });
+      }
+
       const result = await userCollection.insertOne(user);
+      res.send(result);
+    });
+
+    // rider related api
+    app.post("/riders", async (req, res) => {
+      const rider = req.body;
+      rider.status = "pending";
+      rider.createdAt = new Date();
+
+      const result = await riderCollection.insertOne(rider);
       res.send(result);
     });
 
