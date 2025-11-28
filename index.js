@@ -94,7 +94,24 @@ async function run() {
       rider.status = "pending";
       rider.createdAt = new Date();
 
+      const isExist = await riderCollection.findOne({ email: rider.email });
+      if (isExist) {
+        return res.send({ message: "already send request" });
+      }
+
       const result = await riderCollection.insertOne(rider);
+      res.send(result);
+    });
+
+    // pending rider
+    app.get("/riders", async (req, res) => {
+      const query = {};
+      if (req.status.query) {
+        query.status = req.status.query;
+      }
+
+      const cursor = riderCollection.find(query);
+      const result = await cursor.toArray();
       res.send(result);
     });
 
@@ -224,8 +241,9 @@ async function run() {
     });
 
     app.get("/payments", verifyFbToken, async (req, res) => {
-      console.log(req.decoded_email);
+      console.log("decoded email:", req.decoded_email);
       const email = req.query.email;
+      console.log("email :", email);
       const query = {};
       if (email) {
         query.customerEmail = email;
