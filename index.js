@@ -88,6 +88,12 @@ async function run() {
       res.send(result);
     });
 
+    app.get("users", async (req, res) => {
+      const cursor = userCollection.find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
     // rider related api
     app.post("/riders", async (req, res) => {
       const rider = req.body;
@@ -103,7 +109,7 @@ async function run() {
       res.send(result);
     });
 
-    // pending rider
+    //  rider
     app.get("/riders", async (req, res) => {
       const query = {};
       if (req.query.status) {
@@ -116,15 +122,31 @@ async function run() {
     });
 
     // rider approval api
-    app.patch("riders/:id", async (req, res) => {
+    app.patch("/riders/:id", verifyFbToken, async (req, res) => {
       const { id } = req.params;
+      console.log(id);
       const status = req.body.status;
+      console.log(status);
       const query = { _id: new ObjectId(id) };
       const updatedDoc = {
         $set: { status: status },
       };
 
       const result = await riderCollection.updateOne(query, updatedDoc);
+
+      if (status === "approved") {
+        const email = req.body.email;
+        const queryUser = { email };
+        const updateUser = {
+          $set: { role: "rider" },
+        };
+
+        const userUpdateResult = await userCollection.updateOne(
+          queryUser,
+          updateUser
+        );
+      }
+
       res.send(result);
     });
 
