@@ -88,10 +88,36 @@ async function run() {
       res.send(result);
     });
 
-    app.get("users", async (req, res) => {
+    app.get("/users", async (req, res) => {
       const cursor = userCollection.find();
       const result = await cursor.toArray();
       res.send(result);
+    });
+
+    app.patch("/users/:id", async (req, res) => {
+      const { id } = req.params;
+      const updatedInfo = req.body;
+      const query = { _id: new ObjectId(id) };
+      console.log(updatedInfo, query);
+
+      const updatedDoc = {
+        $set: {
+          role: updatedInfo.role,
+        },
+      };
+
+      const result = await userCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
+
+    // role based api
+    app.get("/users/:email/role", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const result = await userCollection.findOne(query);
+
+      console.log(result);
+      res.send(result?.role || "user");
     });
 
     // rider related api
