@@ -47,11 +47,11 @@ const verifyFbToken = async (req, res, next) => {
     return res.status(401).send({ message: "unauthorized access." });
   }
   const idToken = token.split(" ")[1];
-  console.log(idToken);
+
   try {
     const decoded = await admin.auth().verifyIdToken(idToken);
     req.decoded_email = decoded.email;
-    console.log(decoded);
+
     next();
   } catch (error) {
     return res.status(401).send({ message: "unauthorized access." });
@@ -103,7 +103,17 @@ async function run() {
     });
 
     app.get("/users", async (req, res) => {
-      const cursor = userCollection.find();
+      const searchText = req.query.search;
+      let query = {};
+      if (searchText) {
+        query.$or = [
+          { displayName: { $regex: searchText, $options: "i" } },
+          { email: { $regex: searchText, $options: "i" } },
+        ];
+      }
+
+      console.log(query);
+      const cursor = userCollection.find(query).sort({ createdAt: 1 }).limit(2);
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -112,7 +122,6 @@ async function run() {
       const { id } = req.params;
       const updatedInfo = req.body;
       const query = { _id: new ObjectId(id) };
-      console.log(updatedInfo, query);
 
       const updatedDoc = {
         $set: {
@@ -130,7 +139,6 @@ async function run() {
       const query = { email };
       const result = await userCollection.findOne(query);
 
-      console.log(result);
       res.send(result?.role || "user");
     });
 
@@ -162,11 +170,11 @@ async function run() {
     });
 
     // rider approval api
-    app.patch("/riders/:id", verifyFbToken, async (req, res) => {
+    app.patch("/riders/:id", verifyFbToken, verifyAdmin, async (req, res) => {
       const { id } = req.params;
-      console.log(id);
+
       const status = req.body.status;
-      console.log(status);
+
       const query = { _id: new ObjectId(id) };
       const updatedDoc = {
         $set: { status: status },
@@ -192,11 +200,15 @@ async function run() {
 
     // parcel related api
     app.get("/parcels", async (req, res) => {
-      const { email } = req.query;
+      const { email, deliveryStatus } = req.query;
       const query = {};
 
       if (email) {
         query.senderEmail = email;
+      }
+
+      if (deliveryStatus) {
+        query.deliveryStatus = deliveryStatus;
       }
       const sortField = { created_at: -1 };
       const cursor = parcelCollection.find(query).sort(sortField);
@@ -234,7 +246,7 @@ async function run() {
     // payment related api
     app.post("/create-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
-      console.log(paymentInfo);
+
       const amount = parseInt(paymentInfo?.cost) * 100;
       const session = await stripe.checkout.sessions.create({
         line_items: [
@@ -260,14 +272,13 @@ async function run() {
         cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancel`,
       });
 
-      console.log(session);
       res.send({ url: session.url });
     });
 
     app.patch("/payment-success/:sessionId", async (req, res) => {
       const { sessionId } = req.params;
       const session = await stripe.checkout.sessions.retrieve(sessionId);
-      console.log(session);
+
       const transactionId = session.payment_intent;
 
       if (transactionId) {
@@ -288,7 +299,11 @@ async function run() {
         const id = session.metadata.parcelId;
         const query = { _id: new ObjectId(id) };
         const update = {
-          $set: { paymentStatus: session.payment_status, trackingId },
+          $set: {
+            paymentStatus: session.payment_status,
+            trackingId,
+            deliveryStatus: "pending-pickup",
+          },
         };
         const result = await parcelCollection.updateOne(query, update);
 
@@ -316,9 +331,8 @@ async function run() {
     });
 
     app.get("/payments", verifyFbToken, async (req, res) => {
-      console.log("decoded email:", req.decoded_email);
       const email = req.query.email;
-      console.log("email :", email);
+
       const query = {};
       if (email) {
         query.customerEmail = email;
